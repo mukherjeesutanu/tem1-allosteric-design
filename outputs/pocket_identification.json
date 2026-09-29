@@ -1,0 +1,112 @@
+[
+  {
+    "pdb": "1PZO",
+    "resname": "CBT",
+    "copies": [
+      {
+        "resid": 300,
+        "n_contacts": 12,
+        "frac_hydrophobic": 0.5833333333333334,
+        "dist_ser70": 10.211239151660132,
+        "center": [
+          8.75,
+          13.34,
+          29.25
+        ],
+        "contacts": [
+          "VAL216",
+          "ALA217",
+          "LEU220",
+          "SER235",
+          "GLY236",
+          "ALA237",
+          "ARG244",
+          "GLY245",
+          "ILE246",
+          "ILE263",
+          "ASN276",
+          "ILE279"
+        ]
+      },
+      {
+        "resid": 301,
+        "n_contacts": 12,
+        "frac_hydrophobic": 0.75,
+        "dist_ser70": 17.625086582109592,
+        "center": [
+          4.47,
+          13.72,
+          21.81
+        ],
+        "contacts": [
+          "LEU220",
+          "LEU221",
+          "ALA224",
+          "LEU225",
+          "ARG244",
+          "VAL261",
+          "ILE263",
+          "ASN276",
+          "ILE279",
+          "ALA280",
+          "GLY283",
+          "LEU286"
+        ]
+      }
+    ]
+  },
+  {
+    "pdb": "1PZP",
+    "resname": "FTA",
+    "copies": [
+      {
+        "resid": 300,
+        "n_contacts": 16,
+        "frac_hydrophobic": 0.875,
+        "dist_ser70": 21.56848398598488,
+        "center": [
+          3.09,
+          13.91,
+          18.22
+        ],
+        "contacts": [
+          "LEU221",
+          "ALA224",
+          "LEU225",
+          "ILE231",
+          "ILE246",
+          "ALA248",
+          "LEU250",
+          "VAL261",
+          "ILE263",
+          "ILE279",
+          "ALA280",
+          "GLU281",
+          "GLY283",
+          "ALA284",
+          "LEU286",
+          "ILE287"
+        ]
+      },
+      {
+        "resid": 301,
+        "n_contacts": 6,
+        "frac_hydrophobic": 0.5,
+        "dist_ser70": 29.327140958530414,
+        "center": [
+          13.85,
+          -1.87,
+          10.18
+        ],
+        "contacts": [
+          "PRO27",
+          "LEU30",
+          "LYS34",
+          "GLU37",
+          "PHE60",
+          "ARG61"
+        ]
+      }
+    ]
+  }
+]

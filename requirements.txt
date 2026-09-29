@@ -1,0 +1,28 @@
+# versions the committed results were produced with
+rdkit==2025.3.6
+numpy==2.2.6
+scipy>=1.14
+pandas>=2.2
+pyarrow>=17
+scikit-learn>=1.5
+matplotlib>=3.9
+tabulate>=0.9
+tqdm>=4.66
+
+# docking
+vina==1.2.7
+meeko==0.8.0
+# receptor preparation additionally needs the Open Babel CLI (conda-forge)
+
+# interaction fingerprints
+prolif==2.2.2
+MDAnalysis==2.10.0
+
+# generators
+crem==0.3.2           # knowledge-based fragment replacement
+selfies==2.1.1        # evolutionary string design
+safe-mol==0.2.1       # pretrained SAFE-GPT (needs torch>=2.6 + transformers)
+torch>=2.6
+transformers>=4.40
+
+pytest>=8.0

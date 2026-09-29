@@ -1,0 +1,12 @@
+data/generated/
+data/generated/*.jsonl
+data/prepared/
+data/raw/*.db
+data/raw/*.gz
+*.egg-info/
+outputs/*.pdbqt
+outputs/screen.log
+outputs/validate.log
+__pycache__/
+*.py[cod]
+.pytest_cache/

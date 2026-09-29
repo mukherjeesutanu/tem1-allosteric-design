@@ -1,0 +1,12 @@
+filter,n_molecules
+structural_alert,2850
+sa_score,725
+mw,685
+clogp,610
+tpsa,598
+rotb,451
+qed,435
+too_similar_to_reference,356
+hbd,294
+hba,234
+ring_size,27

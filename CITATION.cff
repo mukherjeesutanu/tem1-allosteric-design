@@ -1,0 +1,39 @@
+cff-version: 1.2.0
+title: "tem1-allosteric-design: multi-generator de novo design against the TEM-1 beta-lactamase allosteric pocket"
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - given-names: "Sutanu"
+    family-names: "Mukhopadhyay"
+    orcid: "https://orcid.org/0000-0001-8243-2138"
+repository-code: "https://github.com/mukherjeesutanu/tem1-allosteric-design"
+license: MIT
+version: "0.1.0"
+keywords:
+  - de-novo-design
+  - allosteric-inhibitor
+  - beta-lactamase
+  - molecular-docking
+  - generative-chemistry
+  - structure-based-drug-design
+abstract: >
+  A reproducible pipeline that designs candidate ligands for the validated
+  allosteric pocket of TEM-1 beta-lactamase (PDB 1PZO, 1PZP) using three
+  different generative paradigms - knowledge-based fragment replacement
+  (CReM), evolutionary SELFIES search, and a pretrained SAFE-GPT sequence
+  model - and triages them with a docking protocol that is validated by
+  redocking before use, plus selectivity, site-specificity and
+  interaction-fingerprint controls. No compound is experimentally validated.
+references:
+  - type: article
+    authors:
+      - family-names: "Horn"
+        given-names: "James R."
+      - family-names: "Shoichet"
+        given-names: "Brian K."
+    title: "Allosteric inhibition through core disruption"
+    journal: "Journal of Molecular Biology"
+    year: 2004
+    volume: 336
+    start: 1283
+    doi: "10.1016/j.jmb.2003.12.068"
