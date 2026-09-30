@@ -26,6 +26,7 @@ import argparse
 import time
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from tem1_design.config import CFG, GENERATED, OUTPUTS, REFERENCE_SMILES, Box
@@ -96,6 +97,19 @@ def main() -> None:
              "good at the target site, so the controls run on the funnel's "
              "survivors rather than the whole library.",
     )
+    ap.add_argument(
+        "--random-from-allosteric", type=int, default=0,
+        help="dock a RANDOM sample of N already-docked molecules, chosen "
+             "independently of their allosteric score. --top-from-allosteric "
+             "selects on the very quantity the control is meant to test, so "
+             "its apparent selectivity is partly regression to the mean; this "
+             "is the unbiased comparison.",
+    )
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument(
+        "--tag", default="",
+        help="suffix for the output files, e.g. _random",
+    )
     ap.add_argument("--sites", default=",".join(SITES))
     ap.add_argument(
         "--receptor",
@@ -124,6 +138,19 @@ def main() -> None:
         lib = diverse_subset(lib, args.subset)
         print(f"diversity-selected subset: {len(lib):,} molecules")
 
+    if args.random_from_allosteric:
+        prev = read_results(GENERATED / "docked_allosteric.jsonl")
+        if prev.empty:
+            raise SystemExit("--random-from-allosteric needs a finished allosteric run")
+        pool = prev[prev["status"] == "ok"]["smiles"].tolist()
+        rng = np.random.default_rng(args.seed)
+        n = min(args.random_from_allosteric, len(pool))
+        chosen = set(rng.choice(pool, n, replace=False).tolist())
+        chosen |= set(REFERENCE_SMILES.values())
+        lib = lib[lib["smiles"].isin(chosen)]
+        print(f"controls on a RANDOM sample of {len(lib):,} molecules "
+              f"(seed {args.seed}), independent of allosteric score")
+
     if args.top_from_allosteric:
         prev = read_results(GENERATED / "docked_allosteric.jsonl")
         if prev.empty:
@@ -145,7 +172,7 @@ def main() -> None:
         if site not in SITES:
             continue
         t0 = time.time()
-        out = GENERATED / f"docked_{site}.jsonl"
+        out = GENERATED / f"docked_{site}{args.tag}.jsonl"
         print(f"\n=== {site} site ({len(lib):,} molecules) -> {out.name}")
         screen(
             lib, receptor, SITES[site], CFG, out,

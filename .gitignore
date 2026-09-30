@@ -1,12 +1,12 @@
-data/generated/
-data/generated/*.jsonl
-data/prepared/
+# CReM fragment database (5.8 GB) - fetched by scripts/download_crem_db.sh
 data/raw/*.db
 data/raw/*.gz
-*.egg-info/
-outputs/*.pdbqt
-outputs/screen.log
-outputs/validate.log
+
+# Prepared receptors and docked poses ARE committed (~11 MB): they let the
+# analysis be reproduced without re-running the docking or re-preparing the
+# structures. Only bulky intermediates are excluded.
 __pycache__/
 *.py[cod]
 .pytest_cache/
+*.egg-info/
+*.log

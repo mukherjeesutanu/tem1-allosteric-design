@@ -28,28 +28,96 @@ TEAL, CORAL, SLATE, AMBER, PURPLE = "#2a9d8f", "#e76f51", "#4a5568", "#e9c46a", 
 GEN_COLORS = {"crem": TEAL, "ga": CORAL, "safe": PURPLE, "reference": SLATE}
 
 
+def fig_site_comparison_both(biased: pd.DataFrame, random_set, path: Path) -> None:
+    """Both control sets side by side.
+
+    Left: controls chosen as the best scorers at the design site - selected on
+    the quantity under test, so part of the gap is regression to the mean.
+    Right: a random sample, the unbiased estimate. Showing only the left panel
+    would overstate the site preference.
+    """
+    cols = ["score_allosteric", "score_orthosteric", "score_surface"]
+    labels = ["allosteric\n(design)", "orthosteric\n(catalytic)", "surface\n(non-func.)"]
+    panels = [(biased, "controls = top 150 by design-site score\n(biased)")]
+    if random_set is not None and not random_set.empty:
+        panels.append((random_set, "controls = random 150\n(unbiased)"))
+
+    fig, axes = plt.subplots(1, len(panels), figsize=(5.0 * len(panels), 3.9),
+                             sharey=True)
+    axes = np.atleast_1d(axes)
+    for ax, (frame, title) in zip(axes, panels):
+        have = [c for c in cols if c in frame]
+        paired = frame.dropna(subset=have)
+        if paired.empty:
+            continue
+        x = np.arange(1, len(have) + 1)
+        for row in paired[have].to_numpy():
+            ax.plot(x, row, color=SLATE, alpha=0.06, lw=0.6, zorder=1)
+        parts = ax.violinplot([paired[c] for c in have], positions=x,
+                              showmedians=True, widths=0.7)
+        for pc, color in zip(parts["bodies"], (TEAL, AMBER, CORAL)):
+            pc.set_facecolor(color); pc.set_alpha(0.6); pc.set_zorder(2)
+        for key in ("cmedians", "cbars", "cmins", "cmaxes"):
+            if key in parts:
+                parts[key].set_color(SLATE); parts[key].set_zorder(3)
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels[: len(have)], fontsize=8)
+        for i, c in zip(x, have):
+            ax.text(i + 0.07, paired[c].median(), f" {paired[c].median():.2f}",
+                    va="center", fontsize=8.5)
+        ax.set_title(f"{title}   n = {len(paired)}", loc="left", fontsize=8.5)
+    axes[0].set_ylabel("Vina score (kcal/mol)")
+    axes[0].invert_yaxis()
+    fig.suptitle("Does the design site actually win? (paired, same molecules)",
+                 x=0.01, ha="left", fontsize=10)
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+
+
 def fig_site_comparison(df: pd.DataFrame, path: Path) -> None:
-    """The control figure: is the allosteric site actually preferred?"""
+    """The control figure: is the allosteric site actually preferred?
+
+    The comparison is PAIRED. The control sites were docked only for a subset
+    of the library, so plotting each site's full distribution would compare
+    1,222 molecules at the design site against ~150 different ones at the
+    controls - three different populations, not a control. Only molecules
+    docked at all three sites are shown, and each grey line is one molecule.
+    """
     cols = [c for c in ("score_allosteric", "score_orthosteric", "score_surface") if c in df]
     labels = {"score_allosteric": "allosteric\n(design site)",
               "score_orthosteric": "orthosteric\n(catalytic)",
               "score_surface": "surface\n(non-functional)"}
-    fig, ax = plt.subplots(figsize=(5.4, 3.4))
-    data = [df[c].dropna() for c in cols]
-    parts = ax.violinplot(data, showmedians=True, widths=0.75)
+    paired = df.dropna(subset=cols)
+    if paired.empty:
+        paired = df
+
+    fig, ax = plt.subplots(figsize=(5.8, 3.8))
+    data = [paired[c] for c in cols]
+    x = np.arange(1, len(cols) + 1)
+
+    # per-molecule trajectories
+    vals = paired[cols].to_numpy()
+    for row in vals:
+        ax.plot(x, row, color=SLATE, alpha=0.06, lw=0.6, zorder=1)
+
+    parts = ax.violinplot(data, positions=x, showmedians=True, widths=0.7)
     for pc, color in zip(parts["bodies"], (TEAL, AMBER, CORAL)):
         pc.set_facecolor(color)
-        pc.set_alpha(0.65)
+        pc.set_alpha(0.6)
+        pc.set_zorder(2)
     for key in ("cmedians", "cbars", "cmins", "cmaxes"):
         if key in parts:
             parts[key].set_color(SLATE)
-    ax.set_xticks(range(1, len(cols) + 1))
+            parts[key].set_zorder(3)
+    ax.set_xticks(x)
     ax.set_xticklabels([labels[c] for c in cols], fontsize=8)
     ax.set_ylabel("Vina score (kcal/mol)")
     ax.invert_yaxis()
-    for i, d in enumerate(data, start=1):
-        ax.text(i, d.median(), f"  {d.median():.2f}", va="center", fontsize=8)
-    ax.set_title("Docking score by site", loc="left", fontsize=10)
+    for i, d in zip(x, data):
+        ax.text(i + 0.06, d.median(), f" {d.median():.2f}", va="center", fontsize=8.5)
+    ax.set_title(f"Docking score by site — paired, n = {len(paired)} molecules "
+                 f"docked at all three", loc="left", fontsize=9.5)
     fig.tight_layout()
     fig.savefig(path)
     plt.close(fig)

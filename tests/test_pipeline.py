@@ -157,3 +157,77 @@ def test_consensus_prefers_stronger_binder():
     )
     ranked = consensus_rank(df, CFG)
     assert ranked.iloc[0]["smiles"] == "a"
+
+
+# --- consensus ranking must not invent data -------------------------------
+def test_consensus_rank_does_not_impute_missing_criteria():
+    """A molecule with no control docking must not be handed a median
+    selectivity and allowed to outrank a molecule that was actually measured."""
+    import pandas as pd
+    from tem1_design.config import CFG
+    from tem1_design.score import consensus_rank
+
+    df = pd.DataFrame(
+        {
+            "smiles": ["measured_bad", "untested", "measured_good"],
+            "score_allosteric": [-8.0, -8.0, -8.0],
+            "le_allosteric": [-0.35, -0.35, -0.35],
+            # the untested molecule has NO control data
+            "selectivity": [-2.0, None, 2.0],
+            "site_specificity": [-2.0, None, 2.0],
+            "plif_similarity": [0.5, 0.5, 0.5],
+        }
+    )
+    out = consensus_rank(df, CFG)
+    order = out["smiles"].tolist()
+    assert order[0] == "measured_good", order
+    # the untested molecule is scored on what it has, and says so
+    untested = out[out["smiles"] == "untested"].iloc[0]
+    assert untested["n_criteria"] == 3
+    assert untested["criteria_weight_fraction"] < 1.0
+    measured = out[out["smiles"] == "measured_good"].iloc[0]
+    assert measured["n_criteria"] == 5
+    assert measured["criteria_weight_fraction"] == 1.0
+
+
+def test_untested_molecule_cannot_become_a_candidate():
+    """Missing control data must fail the hurdle, never pass it silently."""
+    import pandas as pd
+    from tem1_design.config import CFG
+    from tem1_design.score import apply_hurdles
+
+    df = pd.DataFrame(
+        {
+            "smiles": ["untested"],
+            "score_allosteric": [-9.0],
+            "le_allosteric": [-0.4],
+            "selectivity": [None],
+            "site_specificity": [None],
+            "plif_similarity": [0.9],
+        }
+    )
+    out = apply_hurdles(df, CFG, reference_score=-8.0)
+    assert bool(out["passes_affinity"].iloc[0]) is True
+    assert bool(out["passes_selectivity"].iloc[0]) is False
+    assert bool(out["is_candidate"].iloc[0]) is False
+
+
+def test_funnel_separates_failed_from_untested():
+    import pandas as pd
+    from tem1_design.config import CFG
+    from tem1_design.score import apply_hurdles, hurdle_funnel
+
+    df = pd.DataFrame(
+        {
+            "smiles": ["a", "b"],
+            "score_allosteric": [-9.0, -9.0],
+            "le_allosteric": [-0.4, -0.4],
+            "selectivity": [-1.0, None],   # a failed, b never tested
+            "site_specificity": [1.0, None],
+            "plif_similarity": [0.9, 0.9],
+        }
+    )
+    f = hurdle_funnel(apply_hurdles(df, CFG, reference_score=-8.0))
+    row = f[f["stage"] == "+ selectivity"].iloc[0]
+    assert row["n"] == 0
+    assert row["n_not_tested_at_this_stage"] == 1

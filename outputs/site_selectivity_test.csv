@@ -1,0 +1,5 @@
+control_set,control_site,n_paired,median_delta_kcal,frac_favouring_allosteric,wilcoxon_p
+top-150 by allosteric score (biased),orthosteric,151,1.419999999999999,0.9933774834437086,1.6070504494274442e-26
+top-150 by allosteric score (biased),surface,151,2.819,1.0,1.5751176681835185e-26
+random 150 (unbiased),orthosteric,152,0.8435000000000001,0.868421052631579,1.3185631429859265e-20
+random 150 (unbiased),surface,152,2.1729999999999996,1.0,1.0791425925668576e-26

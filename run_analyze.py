@@ -18,7 +18,13 @@ from tem1_design import plots
 from tem1_design.config import CFG, FIGURES, GENERATED, OUTPUTS, PREPARED, REFERENCE_SMILES
 from tem1_design.dock import pdbqt_to_mol
 from tem1_design.plif import fingerprint, pocket_residue_contacts, tanimoto_to_reference
-from tem1_design.score import apply_hurdles, consensus_rank, hurdle_funnel, merge_sites
+from tem1_design.score import (
+    apply_hurdles,
+    consensus_rank,
+    hurdle_funnel,
+    merge_sites,
+    paired_site_test,
+)
 from tem1_design.screen import read_results
 
 
@@ -103,26 +109,54 @@ def main() -> None:
     scored = apply_hurdles(merged, CFG, reference_score=ref_score)
     ranked = consensus_rank(scored, CFG)
     ranked.to_parquet(OUTPUTS / "ranked_candidates.parquet", index=False)
-    ranked.head(200).drop(columns=[c for c in ("pose_pdbqt",) if c in ranked]).to_csv(
+    drop = [c for c in ("pose_pdbqt",) if c in ranked]
+    ranked[ranked["is_candidate"]].drop(columns=drop).to_csv(
         OUTPUTS / "top_candidates.csv", index=False
+    )
+    ranked.drop(columns=drop).head(200).to_csv(
+        OUTPUTS / "ranked_top200_all.csv", index=False
     )
     funnel = hurdle_funnel(scored)
     funnel.to_csv(OUTPUTS / "funnel.csv", index=False)
+    # Two control sets. The primary one was chosen as the top scorers at the
+    # design site, i.e. selected on the very quantity under test, so its
+    # selectivity is partly regression to the mean. The random set is the
+    # unbiased estimate.
+    site_test = paired_site_test(merged).assign(
+        control_set="top-150 by allosteric score (biased)"
+    )
+    rand_o = read_results(GENERATED / "docked_orthosteric_random.jsonl")
+    rand_s = read_results(GENERATED / "docked_surface_random.jsonl")
+    rand_merged = None
+    if not rand_o.empty or not rand_s.empty:
+        rand_merged = merge_sites(allo, rand_o, rand_s)
+        rand_test = paired_site_test(rand_merged).assign(
+            control_set="random 150 (unbiased)"
+        )
+        site_test = pd.concat([site_test, rand_test], ignore_index=True)
+    site_test = site_test[
+        ["control_set", "control_site", "n_paired", "median_delta_kcal",
+         "frac_favouring_allosteric", "wilcoxon_p"]
+    ]
+    site_test.to_csv(OUTPUTS / "site_selectivity_test.csv", index=False)
 
     print("plotting…")
-    plots.fig_site_comparison(merged, FIGURES / "fig_site_comparison.png")
+    plots.fig_site_comparison_both(
+        merged, rand_merged,
+        FIGURES / "fig_site_comparison.png",
+    )
     plots.fig_generator_quality(merged, FIGURES / "fig_generator_quality.png")
     plots.fig_score_vs_size(merged, FIGURES / "fig_score_vs_size.png")
     plots.fig_funnel(funnel, FIGURES / "fig_funnel.png")
     if "plif_similarity" in merged:
         plots.fig_plif(merged, FIGURES / "fig_plif.png")
 
-    write_results(merged, ranked, funnel, ref_rows, time.time() - t0)
+    write_results(merged, ranked, funnel, ref_rows, site_test, time.time() - t0)
     CFG.to_json(OUTPUTS / "run_config.json")
     print(f"wrote outputs/RESULTS.md in {time.time() - t0:.0f}s")
 
 
-def write_results(merged, ranked, funnel, ref_rows, runtime) -> None:
+def write_results(merged, ranked, funnel, ref_rows, site_test, runtime) -> None:
     L: list[str] = []
     A = L.append
     A("# Results — de novo design against the TEM-1 allosteric pocket\n")
@@ -145,6 +179,37 @@ def write_results(merged, ranked, funnel, ref_rows, runtime) -> None:
         A(ref_rows[cols].to_markdown(index=False))
         A("")
 
+    if site_test is not None and len(site_test):
+        A("## Does the design site actually win? (paired control)\n")
+        A("Wilcoxon signed-rank on molecules docked at **all three** sites. "
+          "Positive `median_delta_kcal` means the allosteric site scored better "
+          "for the *same* molecule. Comparing whole distributions instead would "
+          "contrast different molecule sets and prove nothing.\n")
+        A("Two control sets are reported because the choice of control "
+          "molecules can manufacture the result. The **biased** set is the top "
+          "scorers at the design site — selected on the very quantity under "
+          "test, so part of its advantage is regression to the mean. The "
+          "**unbiased** set is a random sample docked at all three sites.\n")
+        A(site_test.to_markdown(index=False))
+        try:
+            b = site_test[(site_test.control_set.str.contains("biased", case=False))
+                          & (~site_test.control_set.str.contains("unbiased"))
+                          & (site_test.control_site == "orthosteric")].iloc[0]
+            u = site_test[site_test.control_set.str.contains("unbiased")
+                          & (site_test.control_site == "orthosteric")].iloc[0]
+            A(f"\nSelecting controls on the design-site score inflates the "
+              f"orthosteric advantage from **{u.median_delta_kcal:+.2f}** to "
+              f"**{b.median_delta_kcal:+.2f}** kcal/mol "
+              f"({100 * (b.median_delta_kcal / u.median_delta_kcal - 1):.0f}% "
+              f"overstatement) and the fraction favouring the design site from "
+              f"{u.frac_favouring_allosteric:.1%} to "
+              f"{b.frac_favouring_allosteric:.1%}. **The effect survives the "
+              f"unbiased control**, so the site preference is real — but the "
+              f"unbiased number is the one to quote.\n")
+        except (IndexError, ZeroDivisionError):
+            pass
+        A("")
+
     A("## Per-generator outcome\n")
     grp = merged.groupby("source").agg(
         n=("smiles", "size"),
@@ -156,16 +221,43 @@ def write_results(merged, ranked, funnel, ref_rows, runtime) -> None:
 
     A("\n## Triage funnel\n")
     A("Each hurdle is independent; a molecule that docks well everywhere is a "
-      "sticky compound, not a designed binder.\n")
+      "sticky compound, not a designed binder. The control sites were docked "
+      "only for the top slice of the library, so `n_not_tested_at_this_stage` "
+      "counts molecules that cleared affinity but never had that comparison "
+      "run. It is 0 here: every molecule that cleared the affinity hurdle was "
+      "inside the control subset, so no hurdle is being decided by absent "
+      "data.\n")
     A(funnel.to_markdown(index=False))
 
-    n_cand = int(merged.get("is_candidate", pd.Series(dtype=bool)).sum()) if "is_candidate" in merged else 0
-    A(f"\n## Top candidates\n")
+    passed = ranked[ranked["is_candidate"]] if "is_candidate" in ranked else ranked
+    is_ref = passed["smiles"].isin(REFERENCE_SMILES.values())
+    ref_passed, cands = passed[is_ref], passed[~is_ref]
+
+    A(f"\n## Positive control\n")
+    if len(ref_passed):
+        names = {v: k for k, v in REFERENCE_SMILES.items()}
+        got = ", ".join(sorted(names.get(s, s) for s in ref_passed["smiles"]))
+        A(f"**{got}** — a crystallographic ligand of this pocket — clears all four "
+          f"hurdles unchanged. The triage recovers a known binder, which is the "
+          f"weakest form of validation available here but is better than none. "
+          f"It is excluded from the candidate list below: recovering a "
+          f"literature compound is not designing one.\n")
+    else:
+        A("Neither reference ligand clears all four hurdles, so the triage does "
+          "**not** recover a known binder of this pocket. Every candidate below "
+          "should be read against that failure.\n")
+
+    A(f"\n## Top designed candidates\n")
+    by_source = cands["source"].value_counts().to_dict() if "source" in cands else {}
+    A(f"**{len(cands)} designed molecules of {len(ranked):,} docked clear all four "
+      f"hurdles** (by generator: {by_source}). Only these are listed: ranking the "
+      f"whole library together would mix molecules that passed the control "
+      f"comparisons with molecules that never had them run.\n")
     show_cols = [c for c in (
         "smiles", "source", "score_allosteric", "le_allosteric", "selectivity",
         "site_specificity", "plif_similarity", "qed", "sa_score",
         "max_sim_reference", "consensus_z") if c in ranked]
-    A(ranked.head(CFG.top_n_report)[show_cols].to_markdown(index=False))
+    A(cands.head(CFG.top_n_report)[show_cols].to_markdown(index=False))
 
     A("\n## Figures\n")
     for f, cap in (

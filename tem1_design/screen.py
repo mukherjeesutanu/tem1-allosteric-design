@@ -150,4 +150,8 @@ def read_results(path: Path) -> pd.DataFrame:
             rows.append(json.loads(line))
         except Exception:
             continue
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    if "smiles" in df:
+        # a truncated/duplicated append should never double-count a molecule
+        df = df.drop_duplicates("smiles", keep="last").reset_index(drop=True)
+    return df

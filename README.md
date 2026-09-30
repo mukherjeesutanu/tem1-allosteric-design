@@ -113,13 +113,57 @@ pocket, no candidate is selected on score:
 
 1. **Affinity** — Vina score and ligand efficiency at the allosteric site
 2. **Selectivity** — better there than at the catalytic (orthosteric) site
-3. **Site specificity** — better there than at a non-functional crystallographic
-   surface site 29 Å away
+3. **Site specificity** — better there than at the second crystallographic FTA
+   site, a surface position 29 Å from Ser70. This is a deliberately hard
+   control: it is a *real* ligand-binding depression (FTA occupies it in the
+   1PZP lattice), just one with no catalytic or allosteric role — so beating it
+   means more than beating a random patch of surface.
 4. **Binding-mode fidelity** — its ProLIF interaction fingerprint reproduces
    the reference ligand's contact pattern
 
 Hurdles 2–4 are what separate a designed binder from a greasy molecule that
-docks well everywhere. Results and the full funnel are in
+docks well everywhere.
+
+### Does the design site actually win?
+
+This is the claim the whole project rests on, so it is tested **paired** — the
+same molecule docked at all three sites — and with two different control sets,
+because the choice of control molecules can manufacture the answer.
+
+![Paired site comparison](outputs/figures/fig_site_comparison.png)
+
+| control set | vs orthosteric | vs surface |
+|---|---|---|
+| top 150 by design-site score (**biased**) | +1.42 kcal/mol, 99.3% favour | +2.82, 100% |
+| random 150 (**unbiased**) | **+0.84 kcal/mol, 86.8% favour** | **+2.17, 100%** |
+
+Selecting the control molecules on their design-site score — the obvious thing
+to do, since those are the molecules you care about — **overstates the
+orthosteric advantage by 68%**, because it selects on the very quantity under
+test. The preference survives the unbiased control (p = 1×10⁻²⁰), so it is
+real; but +0.84 kcal/mol is the number to quote, not +1.42.
+
+### Outcome
+
+| | |
+|---|---|
+| Docked at the allosteric site | 1,222 |
+| Clear the affinity hurdle (≥ FTA, −8.42) | 46 |
+| Clear all four hurdles | 44 |
+| — of which a **known ligand recovered** (FTA) | 1 |
+| — **designed** candidates | **43**, all from CReM |
+
+FTA, a crystallographic ligand of this pocket, clears every hurdle unchanged.
+That is a positive control, not a result, and it is excluded from the candidate
+count. Neither the SELFIES-GA nor the SAFE-GPT molecules produced a single
+candidate — the yield ordering from the filter stage persists all the way
+through docking.
+
+The 43 designed candidates score −9.24 to −8.42 kcal/mol (43 of 43 better than
+the best reference), with median QED 0.67, median SA 1.91, and median Tanimoto
+to the references of 0.20 — chemically distinct from the literature ligands.
+
+Full funnel, per-generator breakdown and the ranked table are in
 [outputs/RESULTS.md](outputs/RESULTS.md).
 
 ---
@@ -139,7 +183,10 @@ python scripts/identify_pocket.py     # which ligand copy is the real site
 python run_validate.py                # docking protocol validation  -> VALIDATION.md
 python run_generate.py --n 3000       # three generators + filters
 python run_screen.py  --workers 22 --subset 1100 --sites allosteric
-python run_screen.py  --workers 22 --sites orthosteric,surface --top-from-allosteric 400
+python run_screen.py  --workers 22 --sites orthosteric,surface --top-from-allosteric 150
+# unbiased control: same two sites on a RANDOM sample, independent of score
+python run_screen.py  --workers 22 --sites orthosteric,surface \
+                      --random-from-allosteric 150 --seed 0 --tag _random
 python run_analyze.py                 # ranking, figures -> RESULTS.md
 pytest -q
 ```
@@ -177,7 +224,11 @@ laptop.
   conformationally responsive. Rigid docking cannot model the induced fit that
   makes core disruption work.
 - Selectivity and site specificity are **differences between docking scores**,
-  not measured selectivity.
+  not measured selectivity. They are reported paired and against an unbiased
+  random control, but a Vina score difference is still not an affinity.
+- **The three docking boxes are not identical volumes.** A more enclosed box
+  tends to score better for purely geometric reasons, so part of the
+  site preference may be box geometry rather than biology.
 - Novelty is measured against the two reference ligands only — no patent or
   full-ChEMBL search was run.
 - The screen docks a MaxMin diversity-selected subset of the filtered library,
