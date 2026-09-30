@@ -110,9 +110,13 @@ def main() -> None:
     ranked = consensus_rank(scored, CFG)
     ranked.to_parquet(OUTPUTS / "ranked_candidates.parquet", index=False)
     drop = [c for c in ("pose_pdbqt",) if c in ranked]
-    ranked[ranked["is_candidate"]].drop(columns=drop).to_csv(
-        OUTPUTS / "top_candidates.csv", index=False
-    )
+    cleared = ranked[ranked["is_candidate"]].drop(columns=drop)
+    ref_mask = cleared["smiles"].isin(REFERENCE_SMILES.values())
+    # designed molecules only; a recovered reference ligand is a control, not
+    # an output, and must not be counted among the designs
+    cleared[~ref_mask].to_csv(OUTPUTS / "top_candidates.csv", index=False)
+    if ref_mask.any():
+        cleared[ref_mask].to_csv(OUTPUTS / "references_cleared.csv", index=False)
     ranked.drop(columns=drop).head(200).to_csv(
         OUTPUTS / "ranked_top200_all.csv", index=False
     )
