@@ -75,15 +75,18 @@ class Config:
     receptor_pdb: Path = RAW / "1PZO.pdb"
 
     # Boxes derived from the union of both allosteric ligand copies (+5 A).
-    # 1PZO and 1PZP superpose to 0.41 A CA-RMSD and share a frame, so no
-    # transformation is applied.
+    # 1PZO and 1PZP share a crystal frame (0.57 A CA-RMSD as deposited, no
+    # superposition applied), so boxes transfer between them unchanged.
     # Box around the FTA(300) crystal pose + 5 A - the pose the protocol was
     # validated to reproduce. Deliberately NOT the union of both ligand copies:
     # the wider box lets Vina drift into an adjacent surface groove.
     allosteric_box: Box = field(
         default_factory=lambda: Box((3.51, 13.78, 17.65), (14.4, 21.2, 19.5))
     )
-    # Catalytic site, for the selectivity control. Centres are 19.5 A apart.
+    # Catalytic site, for the selectivity control. Centres are 22.3 A apart.
+    # NOTE: this box is 10560 A^3 vs the allosteric box's 5953 A^3. Vina scores
+    # depend on search volume, so run_screen.py --cubic-box repeats the
+    # comparison with identical cubes; see outputs/RESULTS.md.
     orthosteric_box: Box = field(
         default_factory=lambda: Box((9.80, 7.31, 38.07), (24.0, 20.0, 22.0))
     )

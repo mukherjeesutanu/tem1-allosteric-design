@@ -5,6 +5,22 @@ naked receptor it ranks a wrong pose above the crystallographic one. So a
 generated molecule is not judged by score alone -- its pose must also
 *reproduce the interaction pattern* of the reference ligand. That is what this
 module measures.
+
+LIMITS OF THIS METRIC, measured on the committed run — read before quoting it:
+
+* ``_load_protein`` selects ``"protein"``, which DROPS the 227 crystallographic
+  waters. The validation argument is that those waters define this site, so the
+  fidelity score is blind to every water-mediated contact.
+* The prepared receptor PDB carries no hydrogens, so ProLIF's angle-dependent
+  HBond/XBond criteria cannot be evaluated properly.
+* Consequently the FTA reference row sets only **4 bits, all Hydrophobic**
+  (Leu221, Leu225, Val261, Ile287) of 24 columns, although FTA makes 16 residue
+  contacts in the crystal. No PiStacking or ionic bit is set anywhere.
+
+A Tanimoto against a 4-bit reference is coarse: 2 shared bits plus 2 extras
+gives exactly 0.333, just over the 0.3 threshold, and 77.9% of the top-800
+pass. Treat "mode fidelity" as a weak hydrophobic-contact overlap, not as
+evidence that a molecule reproduces the reference binding mode.
 """
 from __future__ import annotations
 

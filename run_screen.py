@@ -110,6 +110,14 @@ def main() -> None:
         "--tag", default="",
         help="suffix for the output files, e.g. _random",
     )
+    ap.add_argument(
+        "--cubic-box", type=float, default=0.0,
+        help="override every site with a CUBE of this side length, centred on "
+             "the same point. The production boxes differ in volume (allosteric "
+             "5953 A^3 vs orthosteric 10560 A^3) and in shape, and Vina scores "
+             "depend on both, so a selectivity measured across them is partly "
+             "box geometry. This makes the three searches identical.",
+    )
     ap.add_argument("--sites", default=",".join(SITES))
     ap.add_argument(
         "--receptor",
@@ -171,11 +179,16 @@ def main() -> None:
         site = site.strip()
         if site not in SITES:
             continue
+        box = SITES[site]
+        if args.cubic_box:
+            box = Box(box.center, (args.cubic_box,) * 3)
+            print(f"    volume-matched cube: {args.cubic_box:.2f} A side "
+                  f"({args.cubic_box ** 3:.0f} A^3)")
         t0 = time.time()
         out = GENERATED / f"docked_{site}{args.tag}.jsonl"
         print(f"\n=== {site} site ({len(lib):,} molecules) -> {out.name}")
         screen(
-            lib, receptor, SITES[site], CFG, out,
+            lib, receptor, box, CFG, out,
             n_workers=args.workers or None,
             exhaustiveness=args.exhaustiveness,
             smiles_col="smiles", name_col="name",

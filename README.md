@@ -56,22 +56,36 @@ mode is instructive ([full matrix](outputs/VALIDATION.md)):
 | **FTA300** | **1PZP** | **✓** | – | **−8.44** | −6.52 | **0.98 Å** | **yes** |
 | CBT301 | 1PZO | ✓ | – | −8.04 | −6.66 | 7.80 Å | no |
 | CBT301 | 1PZO | ✓ | CBT300 | −8.42 | −7.60 | 3.11 Å | no |
-| **CBT300** | **1PZO** | **✓** | **CBT301** | **−7.80** | −7.25 | **1.73 Å** | **yes** |
+| CBT300 | 1PZO | ✓ | CBT301 | −7.80 | −7.25 | 1.73 Å | yes¹ |
 
-Three things worth stating plainly:
+**16 conditions, 2 successes — but only 1 of them is at the design site.**
+¹CBT300 is the *non*-allosteric copy: it sits 10.2 Å from Ser70 and 15 of its
+22 atoms fall inside the catalytic control box. Counting it as validation of
+the allosteric protocol would be wrong. Restricted to the allosteric copies
+(FTA300, CBT301), the matrix is **1 success in 12 conditions**. That single
+condition is the one the design run uses, and one in twelve is a thin basis —
+stated plainly rather than averaged away.
 
-1. **Ordered waters are not optional here.** Stripping them moves FTA from
-   0.98 Å (a textbook redocking success) to 3.52 Å.
-2. **The two CBT copies build each other's site.** CBT300 only redocks
-   correctly when copy 301 is left in the receptor — the cleft is one extended
-   groove occupied by two ligands.
-3. **Where redocking fails, the crystal pose also *scores worse* than the pose
-   Vina prefers.** That is a scoring-function failure, not just a sampling
-   failure, and no amount of extra exhaustiveness fixes it.
+Three further readings, each computed from the matrix rather than asserted
+(`run_validate.py` recomputes them, after an earlier hand-written version of
+this section got two of them wrong):
 
-Design therefore runs **only** on the validated setup: 1PZP with
-crystallographic waters, Vina, box around the FTA site. Vinardo was tested and
-was worse everywhere.
+1. **Waters are decisive for FTA, but not a general effect.** FTA300 goes from
+   3.52 Å to 0.98 Å purely by keeping them — which is why the design receptor
+   keeps them. Across all matched comparisons at the allosteric copies, though,
+   waters improve RMSD in only 2 of 6 (median change −0.00 Å).
+2. **Vina is better on balance, not everywhere.** It wins 5 of 8 matched
+   conditions; Vinardo wins 3. Vina is adopted because it produces the only
+   sub-2 Å pose at the design site.
+3. **Failure is mostly scoring, partly sampling.** Against the un-minimised
+   crystal pose, the crystal scores worse than Vina's choice in 14 of 14
+   failures. That comparison is unfair — the crystal pose was never relaxed in
+   the Vina field — and against the *minimised* crystal pose it holds in 12 of
+   14. So in 2 cases the correct pose does score better and more search could
+   have found it.
+
+Design runs **only** on the validated setup: 1PZP with crystallographic waters,
+Vina, box around the FTA site.
 
 ---
 
@@ -95,9 +109,16 @@ put through the identical filter cascade.
 | SELFIES GA | 1206 | 1206 | 93 | **7.7%** | 0.50 | 4.20 | 319 |
 
 **6,352 unique molecules, 2,419 pass every filter.** The ordering —
-knowledge-based ≫ learned prior ≫ naive evolutionary — is the clearest result
-in the project, and it is a yield statement, not a quality-of-best-hit
-statement.
+knowledge-based ≫ learned prior ≫ naive evolutionary — is a yield statement,
+not a quality-of-best-hit statement.
+
+⚠️ **Caveat on CReM's row.** The committed run truncated CReM's output with
+`sorted(out)[:3000]`, which keeps the alphabetically-first SMILES and silently
+drops everything sorting after `O=…` — all sulfur-first, aromatic-first and
+bracket-atom-first canonical strings. CReM's 60.9% is therefore measured on a
+biased slice of its output. The code now samples randomly instead
+(`crem_gen.py`), but the committed numbers predate that fix and the ordering
+should be treated as indicative until the generation is re-run.
 
 A sanity check on the filters themselves: they flag **FTA**, one of the two
 literature ligands, for its acrylonitrile Michael acceptor. That is chemically
@@ -121,8 +142,22 @@ pocket, no candidate is selected on score:
 4. **Binding-mode fidelity** — its ProLIF interaction fingerprint reproduces
    the reference ligand's contact pattern
 
-Hurdles 2–4 are what separate a designed binder from a greasy molecule that
-docks well everywhere.
+Hurdles 2–4 are *intended* to separate a designed binder from a greasy
+molecule that docks well everywhere. **Measured, they largely do not:**
+
+| hurdle | removed | pass rate where tested | Spearman vs dock score |
+|---|---|---|---|
+| 1 affinity | 1,176 | 3.8% | — |
+| 2 selectivity | **0** | 98.5% | −0.28 |
+| 3 site specificity | **0** | 100% | −0.43 |
+| 4 mode fidelity | 2 | 77.9% | −0.22 |
+
+Hurdles 2 and 3 eliminated nothing, and every criterion correlates with the
+docking score it is supposed to be independent of (which in turn tracks ligand
+size, ρ = −0.48). The candidate set is set almost entirely by the affinity cut;
+the rest are sanity checks that nothing failed. Reporting them as four
+independent filters would overstate the triage, so the numbers are printed in
+`outputs/hurdle_attrition.csv` on every run.
 
 ### Does the design site actually win?
 
@@ -136,12 +171,30 @@ because the choice of control molecules can manufacture the answer.
 |---|---|---|
 | top 150 by design-site score (**biased**) | +1.42 kcal/mol, 99.3% favour | +2.82, 100% |
 | random 150 (**unbiased**) | **+0.84 kcal/mol, 86.8% favour** | **+2.17, 100%** |
+| random 150, **volume-matched cubic boxes** | **+1.32 kcal/mol, 89.5% favour** | **+2.19, 100%** |
 
-Selecting the control molecules on their design-site score — the obvious thing
-to do, since those are the molecules you care about — **overstates the
-orthosteric advantage by 68%**, because it selects on the very quantity under
-test. The preference survives the unbiased control (p = 1×10⁻²⁰), so it is
-real; but +0.84 kcal/mol is the number to quote, not +1.42.
+Two confounds, tested rather than argued:
+
+**Selection.** Choosing the control molecules by their design-site score — the
+obvious thing to do, since those are the molecules you care about — selects on
+the very quantity under test and **overstates the orthosteric advantage by
+68%**. The preference survives the unbiased control (p = 1×10⁻²⁰).
+
+**Box geometry.** The production boxes are not equal in volume (allosteric
+5,953 Å³ vs orthosteric 10,560 Å³), and Vina scores depend on search volume, so
+the comparison was repeated with identical 18.12 Å cubes at all three centres.
+The preference does not shrink — it **grows to +1.32 kcal/mol**. The oversized
+orthosteric box had been scoring that site *better*, so the geometry confound
+was running in the conservative direction. The allosteric score itself barely
+moves (−7.07 production vs −7.10 cube).
+
+A paired exhaustiveness test (8 vs 16) at all three sites changes the median
+score by 0.000 kcal/mol, so search effort is not driving this either.
+
+**The honest caveat is the surface control, not the orthosteric one.** The
+surface box is the least enclosed of the three (56% free volume vs 28% at the
+design site), so beating it is close to automatic — 100% of molecules do, under
+every control set. The orthosteric comparison is the one carrying weight.
 
 ### Outcome
 
@@ -153,13 +206,18 @@ real; but +0.84 kcal/mol is the number to quote, not +1.42.
 | — of which a **known ligand recovered** (FTA) | 1 |
 | — **designed** candidates | **43**, all from CReM |
 
-FTA, a crystallographic ligand of this pocket, clears every hurdle unchanged.
-That is a positive control, not a result, and it is excluded from the candidate
-count. Neither the SELFIES-GA nor the SAFE-GPT molecules produced a single
-candidate — the yield ordering from the filter stage persists all the way
-through docking.
+**This is not a positive control.** The affinity hurdle is defined as "at least
+as good as the best reference", and the best reference is FTA — so FTA passes
+by construction. The informative case is **CBT, the other crystallographic
+ligand of this same pocket, which docks 1.4 kcal/mol worse and fails the
+triage.** A bar that rejects a known binder of the target site is a bar tuned
+to the docking score, not to binding. Read the candidate list as "molecules the
+scoring function likes at least as much as the better reference".
 
-The 43 designed candidates score −9.24 to −8.42 kcal/mol (43 of 43 better than
+Neither the SELFIES-GA nor the SAFE-GPT molecules produced a single candidate —
+no GA or SAFE molecule cleared even hurdle 1.
+
+The 43 designed candidates score −9.24 to −8.44 kcal/mol (43 of 43 better than
 the best reference), with median QED 0.67, median SA 1.91, and median Tanimoto
 to the references of 0.20 — chemically distinct from the literature ligands.
 
@@ -226,9 +284,17 @@ laptop.
 - Selectivity and site specificity are **differences between docking scores**,
   not measured selectivity. They are reported paired and against an unbiased
   random control, but a Vina score difference is still not an affinity.
-- **The three docking boxes are not identical volumes.** A more enclosed box
-  tends to score better for purely geometric reasons, so part of the
-  site preference may be box geometry rather than biology.
+- The three production boxes are **not identical volumes**; this was tested
+  with volume-matched cubes and runs in the conservative direction, but the
+  surface control remains an easy one (least enclosed of the three).
+- **Mode fidelity is weaker than it sounds.** The PLIF receptor drops the
+  crystallographic waters and has no hydrogens, so the FTA reference row sets
+  only 4 hydrophobic bits of 24 and 78% of the top-800 clear the threshold.
+- **Provenance.** The committed `docked_allosteric.jsonl` has 1,225 entries
+  where the documented `--subset 1100` yields 1,101; the extra molecules and
+  116 of the orthosteric rows are carry-over from an earlier run reused by the
+  resume logic. They do not enter the paired tests, which use only molecules
+  docked at all three sites.
 - Novelty is measured against the two reference ligands only — no patent or
   full-ChEMBL search was run.
 - The screen docks a MaxMin diversity-selected subset of the filtered library,

@@ -75,11 +75,34 @@ def test_structures_share_a_frame():
 
 @needs_pdb
 def test_sites_are_well_separated():
-    """Allosteric and orthosteric boxes must not overlap, or the selectivity
-    control is meaningless."""
-    a = np.array(CFG.allosteric_box.center)
-    o = np.array(CFG.orthosteric_box.center)
-    assert np.linalg.norm(a - o) > 15.0
+    """The boxes must be distinct searches, not two views of one pocket.
+
+    Centre distance alone does not establish that - two large boxes 20 A apart
+    still overlap - so the overlap VOLUME is measured. A small overlap is
+    tolerable (the shared slab here is a fraction of a percent); a large one
+    would make the selectivity control meaningless.
+    """
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from run_screen import SITES
+
+    def overlap_volume(b1, b2) -> float:
+        v = 1.0
+        for c1, s1, c2, s2 in zip(b1.center, b1.size, b2.center, b2.size):
+            lo = max(c1 - s1 / 2, c2 - s2 / 2)
+            hi = min(c1 + s1 / 2, c2 + s2 / 2)
+            v *= max(0.0, hi - lo)
+        return v
+
+    allo = SITES["allosteric"]
+    allo_vol = float(np.prod(allo.size))
+    for name in ("orthosteric", "surface"):
+        other = SITES[name]
+        assert np.linalg.norm(
+            np.array(allo.center) - np.array(other.center)
+        ) > 15.0, name
+        frac = overlap_volume(allo, other) / allo_vol
+        assert frac < 0.05, f"{name} box overlaps the allosteric box by {frac:.1%}"
 
 
 @needs_pdb
@@ -160,34 +183,50 @@ def test_consensus_prefers_stronger_binder():
 
 
 # --- consensus ranking must not invent data -------------------------------
-def test_consensus_rank_does_not_impute_missing_criteria():
-    """A molecule with no control docking must not be handed a median
-    selectivity and allowed to outrank a molecule that was actually measured."""
+def test_consensus_rank_does_not_rank_incomplete_molecules():
+    """A molecule with no control docking must not be ranked at all.
+
+    The fixture is deliberately adversarial: the untested molecule has the
+    BEST docking score, so any scheme that imputes its missing criteria - with
+    the column median, or equivalently by renormalising the weights - lets it
+    outrank molecules that were actually measured. An earlier version of this
+    test gave all three the same score, which could not detect that.
+    """
+    import numpy as np
     import pandas as pd
     from tem1_design.config import CFG
     from tem1_design.score import consensus_rank
 
     df = pd.DataFrame(
         {
-            "smiles": ["measured_bad", "untested", "measured_good"],
-            "score_allosteric": [-8.0, -8.0, -8.0],
-            "le_allosteric": [-0.35, -0.35, -0.35],
-            # the untested molecule has NO control data
+            "smiles": ["measured_bad", "untested_but_best_score", "measured_good"],
+            "score_allosteric": [-8.0, -9.5, -8.2],
+            "le_allosteric": [-0.35, -0.45, -0.36],
             "selectivity": [-2.0, None, 2.0],
             "site_specificity": [-2.0, None, 2.0],
-            "plif_similarity": [0.5, 0.5, 0.5],
+            "plif_similarity": [0.5, 0.9, 0.6],
         }
     )
     out = consensus_rank(df, CFG)
-    order = out["smiles"].tolist()
-    assert order[0] == "measured_good", order
-    # the untested molecule is scored on what it has, and says so
-    untested = out[out["smiles"] == "untested"].iloc[0]
-    assert untested["n_criteria"] == 3
-    assert untested["criteria_weight_fraction"] < 1.0
-    measured = out[out["smiles"] == "measured_good"].iloc[0]
-    assert measured["n_criteria"] == 5
-    assert measured["criteria_weight_fraction"] == 1.0
+    untested = out[out["smiles"] == "untested_but_best_score"].iloc[0]
+    assert np.isnan(untested["consensus_z"]), "incomplete molecule was scored"
+    assert not untested["fully_scored"]
+    # it must not occupy a ranked position ahead of a measured molecule
+    ranked = out[out["consensus_z"].notna()]["smiles"].tolist()
+    assert ranked == ["measured_good", "measured_bad"], ranked
+
+
+def test_absent_control_columns_do_not_pass_hurdles():
+    """With no control docking at all, nothing may be called a candidate."""
+    import pandas as pd
+    from tem1_design.config import CFG
+    from tem1_design.score import apply_hurdles
+
+    df = pd.DataFrame({"smiles": ["x"], "score_allosteric": [-9.0],
+                       "le_allosteric": [-0.4]})
+    out = apply_hurdles(df, CFG, reference_score=-8.0)
+    assert bool(out["passes_affinity"].iloc[0]) is True
+    assert bool(out["is_candidate"].iloc[0]) is False
 
 
 def test_untested_molecule_cannot_become_a_candidate():

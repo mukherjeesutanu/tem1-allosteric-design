@@ -95,4 +95,13 @@ def grow_and_mutate(
         frontier = next_frontier[:40]
 
     out.difference_update(seeds)
-    return sorted(out)[:n_target] if len(out) > n_target else sorted(out)
+    # Truncate by RANDOM sample, not by sorting. `sorted(out)[:n]` keeps the
+    # alphabetically-first SMILES, which silently drops every molecule whose
+    # canonical string sorts late - sulfur-first, aromatic-first ("c", "n"),
+    # bracket-atom-first - and makes the resulting pass-rate a statement about
+    # a biased slice rather than about the generator.
+    ordered = sorted(out)                      # deterministic starting order
+    if len(ordered) <= n_target:
+        return ordered
+    # fresh RNG so the sample does not depend on how much the search consumed
+    return sorted(random.Random(cfg.random_seed).sample(ordered, n_target))
